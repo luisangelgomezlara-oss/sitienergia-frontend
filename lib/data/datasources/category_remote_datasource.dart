@@ -14,8 +14,16 @@ class CategoryRemoteDatasource {
       Uri.parse('$baseUrl/categorias'), 
       headers: _headers(token)
     );
-    if (response.statusCode >= 300) throw Exception('No se pudieron cargar los datos');
-    return jsonDecode(response.body); 
+    
+    if (response.statusCode >= 300) {
+      throw Exception('No se pudieron cargar los datos');
+    }
+    
+    // 1. Decodificar el JSON (devuelve List<dynamic>)
+    final List<dynamic> jsonList = jsonDecode(response.body);
+    
+    // 2. Mapear la lista dinámica a una lista de objetos Category
+    return jsonList.map((json) => Category.fromJson(json)).toList(); 
   }
 
   Future<void> createCategory(String token, String nombre, String area) async {
