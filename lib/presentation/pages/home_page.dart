@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import '../../domain/entities/session.dart';
 import 'login_page.dart';
 import 'reportar_falla_page.dart';
-// Importa tus pantallas de administrador
+// Importa tus pantallas de administrador y técnico
 import 'users_page.dart';
 import 'categories_page.dart';
 import 'mis_reportes_page.dart';
 import 'gestion_incidencias_page.dart';
 import 'puntos_atencion_page.dart';
 import 'solicitudes_tramites_page.dart';
+import 'mis_asignaciones_page.dart';
 
 class HomePage extends StatelessWidget {
   final Session session;
@@ -87,9 +88,7 @@ class HomePage extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: session.rol == 'ADMIN'
-                                  ? Colors.purple[100]
-                                  : Colors.green[100],
+                              color: _getColorPorRol(session.rol)[100],
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -97,9 +96,7 @@ class HomePage extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: session.rol == 'ADMIN'
-                                    ? Colors.purple[800]
-                                    : Colors.green[800],
+                                color: _getColorPorRol(session.rol)[800],
                               ),
                             ),
                           ),
@@ -132,6 +129,13 @@ class HomePage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // --- Método auxiliar para colores del rol ---
+  MaterialColor _getColorPorRol(String rol) {
+    if (rol == 'ADMIN') return Colors.purple;
+    if (rol == 'TECNICO') return Colors.orange;
+    return Colors.green; // CLIENTE
   }
 
   // --- Lógica de Tarjetas por Rol ---
@@ -181,6 +185,23 @@ class HomePage extends StatelessWidget {
           },
         ),
       ];
+    } else if (session.rol == 'TECNICO') {
+      // Menú exclusivo para Técnicos
+      return [
+        _construirTarjeta(
+          context: context,
+          titulo: 'Mis\nAsignaciones',
+          icono: Icons.handyman_outlined,
+          colorFondo: Colors.orange[50]!,
+          colorIcono: Colors.orange[700]!,
+          alPresionar: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => MisAsignacionesPage(session: session)),
+            );
+          },
+        ),
+      ];
     } else {
       // Menú para Clientes
       return [
@@ -214,8 +235,8 @@ class HomePage extends StatelessWidget {
         ),
         _construirTarjeta(
           context: context,
-          titulo: 'Solicitudes\ny Trámites',
-          icono: Icons.document_scanner_outlined,
+          titulo: 'Solicitudes\nde Red',
+          icono: Icons.electrical_services_outlined,
           colorFondo: Colors.green[50]!,
           colorIcono: Colors.green[700]!,
           alPresionar: () {
@@ -228,7 +249,7 @@ class HomePage extends StatelessWidget {
         ),
         _construirTarjeta(
           context: context,
-          titulo: 'Puntos de\nAtención',
+          titulo: 'Servicios\nComunitarios',
           icono: Icons.location_on_outlined,
           colorFondo: Colors.orange[50]!,
           colorIcono: Colors.orange[700]!,

@@ -1,13 +1,14 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import '../../domain/entities/session.dart';
-import '../../data/datasources/incidencia_remote_datasource.dart';
-import '../../data/models/incidencia_model.dart';
 
 class ReportarFallaPage extends StatefulWidget {
   final Session session;
-
   const ReportarFallaPage({super.key, required this.session});
 
   @override
@@ -15,28 +16,20 @@ class ReportarFallaPage extends StatefulWidget {
 }
 
 class _ReportarFallaPageState extends State<ReportarFallaPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _nicController = TextEditingController();
-  final _descripcionController = TextEditingController();
-  final _ubicacionController = TextEditingController(); // Aún útil como referencia escrita
-
-  int? _categoriaIdSeleccionada;
-  bool _isLoading = false;
-
-  // --- VARIABLES PARA EL MAPA ---
-  GoogleMapController? mapController;
-  LatLng? _coordenadasSeleccionadas;
-  Set<Marker> _markers = {};
-  bool _buscandoUbicacion = true;
+  LatLng _centerLatLng = const LatLng(8.8829, -75.7276);
+  GoogleMapController? _mapController;
+  bool _cargandoUbicacion = true;
+  bool _enviando = false;
   
-  // Coordenadas por defecto (Bogotá) en caso de que falle el GPS
-  static const LatLng _centroPorDefecto = LatLng(4.6097, -74.0817);
-
-  final List<Map<String, dynamic>> _categoriasFake = [
-    {"id": 1, "nombre": "Falla en red de baja tensión"},
-    {"id": 2, "nombre": "Transformador quemado"},
-    {"id": 3, "nombre": "Poste caído"},
-  ];
+  String? _tipoDanoSeleccionado;
+  String? _detalleDanoSeleccionado;
+  final TextEditingController _nicController = TextEditingController();
+  final TextEditingController _referenciaController = TextEditingController();
+  final TextEditingController _contactoController = TextEditingController();
+  File? _imagenEvidencia;
+  
+  final List<String> _tiposDeDano = ['Infraestructura (Postes/Cables)', 'Medidor / Acometida', 'Transformador', 'Alumbrado Público'];
+  final List<String> _detallesDano = ['Poste a punto de caer', 'Cables reventados en vía', 'Medidor echando chispas', 'Sin energía en el sector', 'Luminaria apagada'];
 
   @override
   void initState() {
@@ -44,259 +37,225 @@ class _ReportarFallaPageState extends State<ReportarFallaPage> {
     _obtenerUbicacionActual();
   }
 
-  // --- LÓGICA DEL GPS Y MAPA ---
   Future<void> _obtenerUbicacionActual() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      _finalizarBusquedaConUbicacionFija(_centroPorDefecto);
+      setState(() => _cargandoUbicacion = false);
       return;
     }
 
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        _finalizarBusquedaConUbicacionFija(_centroPorDefecto);
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        setState(() => _cargandoUbicacion = false);
         return;
       }
     }
-
-    if (permission == LocationPermission.deniedForever) {
-      _finalizarBusquedaConUbicacionFija(_centroPorDefecto);
-      return;
-    }
-
-    try {
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      LatLng ubicacionActual = LatLng(position.latitude, position.longitude);
-      _finalizarBusquedaConUbicacionFija(ubicacionActual);
-    } catch (e) {
-      _finalizarBusquedaConUbicacionFija(_centroPorDefecto);
-    }
-  }
-
-  void _finalizarBusquedaConUbicacionFija(LatLng ubicacion) {
+    
+    Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
     if (mounted) {
       setState(() {
-        _coordenadasSeleccionadas = ubicacion;
-        _actualizarMarcador(ubicacion);
-        _buscandoUbicacion = false;
+        _centerLatLng = LatLng(position.latitude, position.longitude);
+        _cargandoUbicacion = false;
       });
-
-      if (mapController != null) {
-        mapController!.animateCamera(CameraUpdate.newLatLngZoom(ubicacion, 16));
-      }
+      _mapController?.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: _centerLatLng, zoom: 17)));
     }
   }
 
-  void _actualizarMarcador(LatLng position) {
-    setState(() {
-      _coordenadasSeleccionadas = position;
-      _markers.clear();
-      _markers.add(
-        Marker(
-          markerId: const MarkerId('falla_ubicacion'),
-          position: position,
-          infoWindow: const InfoWindow(title: 'Lugar del daño'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        ),
-      );
-    });
+  Future<void> _tomarFoto() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70);
+    if (photo != null) {
+      setState(() => _imagenEvidencia = File(photo.path));
+    }
   }
 
-  // --- EL PUENTE A SPRING BOOT ---
   Future<void> _enviarReporte() async {
-    if (_formKey.currentState!.validate()) {
-      if (_categoriaIdSeleccionada == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Por favor selecciona una categoría')),
-        );
-        return;
-      }
-
-      if (_coordenadasSeleccionadas == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aún no se ha cargado el mapa de ubicación')),
-        );
-        return;
-      }
-
-      setState(() { _isLoading = true; });
-
-      try {
-        final datasource = IncidenciaRemoteDatasource();
-
-        final request = IncidenciaRequest(
-          categoriaId: _categoriaIdSeleccionada!,
-          nic: _nicController.text,
-          descripcion: _descripcionController.text,
-          ubicacion: _ubicacionController.text, 
-          // AQUÍ MANDAMOS LAS COORDENADAS DEL MAPA:
-          latitud: _coordenadasSeleccionadas!.latitude,
-          longitud: _coordenadasSeleccionadas!.longitude,
-        );
-
-        final token = widget.session.token;
-        final exito = await datasource.crearIncidencia(request, token);
-
-        if (exito) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('¡Incidencia reportada con GPS en Spring Boot!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            Navigator.pop(context);
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Error: El backend rechazó la petición.'), backgroundColor: Colors.red),
-            );
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error de conexión: $e'), backgroundColor: Colors.red),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() { _isLoading = false; });
-        }
-      }
+    if (_tipoDanoSeleccionado == null || _nicController.text.isEmpty || _referenciaController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Faltan campos requeridos'), backgroundColor: Colors.red));
+      return;
     }
+    
+    setState(() => _enviando = true);
+
+    try {
+      String? imagenBase64;
+      if (_imagenEvidencia != null) {
+        final bytes = await _imagenEvidencia!.readAsBytes();
+        imagenBase64 = base64Encode(bytes);
+      }
+
+      int categoriaId = _tiposDeDano.indexOf(_tipoDanoSeleccionado!) + 1;
+      
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8080/api/incidencias'), 
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.session.token}'
+        },
+        body: jsonEncode({
+          "categoriaId": categoriaId,
+          "nic": _nicController.text,
+          "descripcion": "${_detalleDanoSeleccionado ?? ''} - ${_referenciaController.text}",
+          "ubicacion": "${_centerLatLng.latitude}, ${_centerLatLng.longitude}",
+          "latitud": _centerLatLng.latitude,
+          "longitud": _centerLatLng.longitude,
+          "imagen": imagenBase64
+        }),
+      );
+
+      if (mounted) {
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reporte registrado con éxito'), backgroundColor: Colors.green));
+          Navigator.pop(context);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error del servidor: ${response.body}'), backgroundColor: Colors.red));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error de conexión: $e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nicController.dispose();
+    _referenciaController.dispose();
+    _contactoController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Reportar Falla (Incidencia)'),
-        backgroundColor: Colors.red[700],
+        title: const Text('Reportar Falla', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xff176b87),
         foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 250,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  GoogleMap(
+                    initialCameraPosition: CameraPosition(target: _centerLatLng, zoom: 16),
+                    onMapCreated: (controller) => _mapController = controller,
+                    onCameraMove: (position) => _centerLatLng = position.target,
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: true,
+                    zoomControlsEnabled: false,
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 35.0),
+                    child: Icon(Icons.location_on, size: 45, color: Colors.red),
+                  ),
+                  if (_cargandoUbicacion)
+                    const Positioned(top: 16, child: CircularProgressIndicator()),
+                ],
+              ),
+            ),
+            
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              color: Colors.blue[600],
+              child: Text(
+                'Coordenadas: ${_centerLatLng.latitude.toStringAsFixed(4)}, ${_centerLatLng.longitude.toStringAsFixed(4)}',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Tipo de daño', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    decoration: InputDecoration(filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                    hint: const Text('Seleccione aquí'),
+                    value: _tipoDanoSeleccionado,
+                    items: _tiposDeDano.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                    onChanged: (val) => setState(() => _tipoDanoSeleccionado = val),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const Text('NIC del Servicio', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _nicController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(filled: true, fillColor: Colors.white, hintText: 'Ej: 4409315', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const Text('Detalle del daño', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    decoration: InputDecoration(filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                    hint: const Text('Seleccione aquí'),
+                    value: _detalleDanoSeleccionado,
+                    items: _detallesDano.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                    onChanged: (val) => setState(() => _detalleDanoSeleccionado = val),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const Text('Punto de referencia / Descripción', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _referenciaController,
+                    maxLines: 3,
+                    decoration: InputDecoration(filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                  ),
+                  const SizedBox(height: 20),
+
+                  Row(
                     children: [
-                      const Text('Detalles del Daño', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 16),
-
-                      DropdownButtonFormField<int>(
-                        decoration: const InputDecoration(labelText: 'Tipo de falla', border: OutlineInputBorder()),
-                        value: _categoriaIdSeleccionada,
-                        items: _categoriasFake.map((cat) {
-                          return DropdownMenuItem<int>(
-                            value: cat['id'] as int,
-                            child: Text(cat['nombre'] as String),
-                          );
-                        }).toList(),
-                        onChanged: (val) { setState(() { _categoriaIdSeleccionada = val; }); },
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _nicController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Número de NIC (Recibo de luz)',
-                          hintText: 'Ej. 1234567',
-                          prefixIcon: Icon(Icons.receipt_long),
-                          border: OutlineInputBorder(),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xff176b87),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                          ),
+                          onPressed: _enviando ? null : _enviarReporte,
+                          child: _enviando 
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                              : const Text('Registro', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                         ),
-                        validator: (value) => value == null || value.isEmpty ? 'Obligatorio' : null,
                       ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _descripcionController,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: 'Descripción del daño',
-                          hintText: 'Ej. Salen chispas y huele a quemado',
-                          border: OutlineInputBorder(),
+                      const SizedBox(width: 12),
+                      InkWell(
+                        onTap: _tomarFoto,
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(color: _imagenEvidencia == null ? Colors.grey[300] : Colors.green[100], borderRadius: BorderRadius.circular(8)),
+                          child: Icon(Icons.camera_alt, color: _imagenEvidencia == null ? Colors.black54 : Colors.green[800], size: 28),
                         ),
-                        validator: (value) => value == null || value.isEmpty ? 'Escribe una descripción' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      TextFormField(
-                        controller: _ubicacionController,
-                        decoration: const InputDecoration(
-                          labelText: 'Dirección o referencia escrita',
-                          hintText: 'Ej. Cra 4 Calle 5-56',
-                          prefixIcon: Icon(Icons.map),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) => value == null || value.isEmpty ? 'Obligatorio' : null,
                       ),
                     ],
                   ),
-                ),
+                  if (_imagenEvidencia != null)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8.0),
+                      child: Text('✓ Evidencia fotográfica capturada', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                    )
+                ],
               ),
-              const SizedBox(height: 24),
-
-              // --- CONTENEDOR DEL MAPA ---
-              const Text('Señala en el mapa el lugar exacto:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 10),
-              Container(
-                height: 250,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: _buscandoUbicacion
-                      ? const Center(child: CircularProgressIndicator())
-                      : GoogleMap(
-                          initialCameraPosition: CameraPosition(
-                            target: _coordenadasSeleccionadas ?? _centroPorDefecto,
-                            zoom: 16,
-                          ),
-                          markers: _markers,
-                          onMapCreated: (GoogleMapController controller) {
-                            mapController = controller;
-                          },
-                          onTap: (LatLng position) {
-                            // Al tocar el mapa, se mueve el marcador rojo
-                            _actualizarMarcador(position);
-                          },
-                          myLocationEnabled: true,
-                          myLocationButtonEnabled: true,
-                        ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // --- BOTÓN DE ENVIAR ---
-              _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.red[700],
-                      ),
-                      onPressed: _enviarReporte,
-                      child: const Text('ENVIAR REPORTE', style: TextStyle(fontSize: 16, color: Colors.white)),
-                    ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

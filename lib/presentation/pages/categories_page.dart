@@ -13,7 +13,7 @@ class CategoriesPage extends StatefulWidget {
 
 class _CategoriesPageState extends State<CategoriesPage> {
   List<Category> items = [];
-  List<Category> filteredItems = []; // Para el buscador
+  List<Category> filteredItems = [];
   bool loading = true;
   final TextEditingController _searchController = TextEditingController();
 
@@ -32,7 +32,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
   void message(Object error) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
   
-  // --- Lógica del buscador ---
   void _filterCategories() {
     final query = _searchController.text.toLowerCase();
     setState(() {
@@ -51,7 +50,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
           items = data; 
           filteredItems = data;
           loading = false; 
-          _filterCategories(); // Mantiene el filtro si hay texto
+          _filterCategories(); 
         }); 
       }
     }
@@ -69,13 +68,15 @@ class _CategoriesPageState extends State<CategoriesPage> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(item == null ? 'Nueva categoría' : 'Editar categoría', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xff176b87))), 
-        content: Column(
-          mainAxisSize: MainAxisSize.min, 
-          children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'Nombre de la falla', border: OutlineInputBorder())), 
-            const SizedBox(height: 16), 
-            TextField(controller: area, decoration: const InputDecoration(labelText: 'Área responsable', border: OutlineInputBorder()))
-          ]
+        content: SingleChildScrollView( // <-- WIDGET AGREGADO PARA EVITAR OVERFLOW
+          child: Column(
+            mainAxisSize: MainAxisSize.min, 
+            children: [
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'Nombre de la falla', border: OutlineInputBorder())), 
+              const SizedBox(height: 16), 
+              TextField(controller: area, decoration: const InputDecoration(labelText: 'Área responsable', border: OutlineInputBorder()))
+            ]
+          ),
         ), 
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))), 
@@ -130,13 +131,12 @@ class _CategoriesPageState extends State<CategoriesPage> {
     }
   }
 
-  // --- Helpers visuales ---
   Color _getColorPorArea(String area) {
     final a = area.toLowerCase();
     if (a.contains('redes') || a.contains('electrica') || a.contains('tensión')) return Colors.blue;
     if (a.contains('obras') || a.contains('civil')) return Colors.orange;
     if (a.contains('comercial') || a.contains('medidor')) return Colors.green;
-    return Colors.purple; // Por defecto
+    return Colors.purple;
   }
   
   @override
@@ -160,7 +160,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
         ? const Center(child: CircularProgressIndicator()) 
         : Column(
             children: [
-              // --- Barra de búsqueda ---
               Container(
                 padding: const EdgeInsets.all(16),
                 color: const Color(0xff176b87),
@@ -180,7 +179,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                 ),
               ),
               
-              // --- Lista de Categorías ---
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: refresh, 
@@ -203,7 +201,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                           padding: const EdgeInsets.all(16.0),
                           child: Row(
                             children: [
-                              // Avatar Dinámico
                               CircleAvatar(
                                 radius: 25,
                                 backgroundColor: colorArea.withOpacity(0.15),
@@ -211,7 +208,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                               ),
                               const SizedBox(width: 16),
                               
-                              // Info de la Categoría
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,7 +223,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
                                 ),
                               ),
                               
-                              // Botones de acción
                               Row(
                                 mainAxisSize: MainAxisSize.min, 
                                 children: [

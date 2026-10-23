@@ -36,6 +36,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
   List<IncidenciaAdminItem> filteredReportes = [];
 
   final String baseUrl = 'http://127.0.0.1:8080/api/incidencias';
+  final String usuariosUrl = 'http://127.0.0.1:8080/api/usuarios';
 
   @override
   void initState() {
@@ -84,7 +85,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
 
         if (mounted) {
           setState(() {
-            reportes = list.reversed.toList(); // Mostrar las más nuevas arriba
+            reportes = list.reversed.toList(); 
             filteredReportes = reportes;
             loading = false;
           });
@@ -112,12 +113,89 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
 
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Estado actualizado'), backgroundColor: Colors.green));
-        _cargarTodasLasIncidencias(); // Recargar lista
+        _cargarTodasLasIncidencias(); 
       } else {
         throw Exception('Error al actualizar');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  // --- NUEVA LÓGICA DE ASIGNACIÓN ---
+  Future<void> _asignarTecnico(int incidenciaId, int tecnicoId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/$incidenciaId/asignar/$tecnicoId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.session.token}'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Técnico asignado exitosamente'), backgroundColor: Colors.green));
+        _cargarTodasLasIncidencias();
+      } else {
+        throw Exception('Error al asignar técnico');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _abrirDialogoAsignar(int incidenciaId) async {
+    try {
+      final response = await http.get(
+        Uri.parse(usuariosUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.session.token}'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+        // Filtramos para mostrar solo a los técnicos que estén activos
+        final tecnicos = data.where((u) => u['rol'] == 'TECNICO' && u['activo'] == true).toList();
+
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Seleccionar Técnico', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xff176b87))),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: tecnicos.isEmpty 
+                  ? const Text('No hay técnicos registrados o activos.')
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: tecnicos.length,
+                      itemBuilder: (context, index) {
+                        final tec = tecnicos[index];
+                        return ListTile(
+                          leading: const CircleAvatar(backgroundColor: Colors.orangeAccent, child: Icon(Icons.handyman, color: Colors.white, size: 20)),
+                          title: Text(tec['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('ID: ${tec['telefono'] ?? 'N/A'}'),
+                          onTap: () {
+                            Navigator.pop(context); // Cierra el modal
+                            _asignarTecnico(incidenciaId, tec['id']); // Llama al PUT de tu backend
+                          },
+                        );
+                      },
+                    ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey)))
+              ],
+            );
+          },
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error cargando técnicos: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -132,11 +210,21 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
             children: [
               const Padding(
                 padding: EdgeInsets.all(16.0),
-                child: Text('Actualizar Estado', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: Text('Gestionar Incidencia', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
+              // Botón de asignación añadido arriba
+              ListTile(
+                leading: const Icon(Icons.person_add_alt_1_rounded, color: Colors.blue),
+                title: const Text('ASIGNAR TÉCNICO', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _abrirDialogoAsignar(item.id);
+                },
+              ),
+              const Divider(),
               ListTile(
                 leading: const Icon(Icons.access_time_rounded, color: Colors.red),
-                title: const Text('PENDIENTE'),
+                title: const Text('Marcar como PENDIENTE'),
                 onTap: () {
                   Navigator.pop(context);
                   _actualizarEstado(item.id, 'PENDIENTE');
@@ -144,7 +232,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.engineering_rounded, color: Colors.orange),
-                title: const Text('EN PROCESO'),
+                title: const Text('Marcar como EN PROCESO'),
                 onTap: () {
                   Navigator.pop(context);
                   _actualizarEstado(item.id, 'EN_PROCESO');
@@ -152,7 +240,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
-                title: const Text('RESUELTO'),
+                title: const Text('Marcar como RESUELTO'),
                 onTap: () {
                   Navigator.pop(context);
                   _actualizarEstado(item.id, 'RESUELTO');
