@@ -1,1 +1,1 @@
-const String baseUrl = "https://sitienergia-backend.onrender.com/api/...";
+const String baseUrl = "https://sitienergia-backend.onrender.com/api";

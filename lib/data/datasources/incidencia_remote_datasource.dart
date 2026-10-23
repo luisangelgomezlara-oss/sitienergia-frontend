@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import '../models/incidencia_model.dart'; // Asegúrate de que el nombre coincida
 
 class IncidenciaRemoteDatasource {
-  final String baseUrl = "https://sitienergia-backend.onrender.com/api/..."; 
+  final String baseUrl = "https://sitienergia-backend.onrender.com/api";
 
   Future<bool> crearIncidencia(IncidenciaRequest request, String token) async {
     final url = Uri.parse('$baseUrl/incidencias');
