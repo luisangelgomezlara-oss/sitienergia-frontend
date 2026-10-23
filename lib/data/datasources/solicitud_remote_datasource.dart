@@ -3,8 +3,7 @@ import 'package:http/http.dart' as http;
 import '../models/solicitud_model.dart'; // Asegúrate de que el nombre coincida
 
 class SolicitudRemoteDatasource {
-  final String baseUrl = "http://10.0.2.2:8080/api"; 
-
+  String baseUrl = "https://sitienergia-backend.onrender.com/api/...";
   Future<bool> crearSolicitud(SolicitudRequest request, String token) async {
     final url = Uri.parse('$baseUrl/solicitudes');
     
