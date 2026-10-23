@@ -89,7 +89,7 @@ class _ReportarFallaPageState extends State<ReportarFallaPage> {
       int categoriaId = _tiposDeDano.indexOf(_tipoDanoSeleccionado!) + 1;
       
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:8080/api/incidencias'), 
+        Uri.parse('https://sitienergia-backend.onrender.com/api/incidencias'), 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${widget.session.token}'

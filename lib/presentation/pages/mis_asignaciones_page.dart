@@ -31,7 +31,7 @@ class MisAsignacionesPage extends StatefulWidget {
 class _MisAsignacionesPageState extends State<MisAsignacionesPage> {
   bool loading = true;
   List<IncidenciaTecnicoItem> asignaciones = [];
-  final String baseUrl = 'http://127.0.0.1:8080/api/incidencias';
+  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/incidencias';
 
   @override
   void initState() {

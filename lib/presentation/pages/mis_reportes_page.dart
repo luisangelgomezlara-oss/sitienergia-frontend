@@ -37,7 +37,7 @@ class _MisReportesPageState extends State<MisReportesPage> {
   List<IncidenciaItem> filteredReportes = [];
 
   // TODO: Ajusta esta URL a la IP de tu servidor backend local
-  final String baseUrl = 'http://127.0.0.1:8080/api/incidencias';
+  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/incidencias';
 
   @override
   void initState() {

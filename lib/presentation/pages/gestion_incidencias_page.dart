@@ -35,8 +35,8 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
   List<IncidenciaAdminItem> reportes = [];
   List<IncidenciaAdminItem> filteredReportes = [];
 
-  final String baseUrl = 'http://127.0.0.1:8080/api/incidencias';
-  final String usuariosUrl = 'http://127.0.0.1:8080/api/usuarios';
+  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/incidencias';
+  final String usuariosUrl = 'https://sitienergia-backend.onrender.com/api/usuarios';
 
   @override
   void initState() {

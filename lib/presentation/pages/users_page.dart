@@ -19,7 +19,7 @@ class _UsersPageState extends State<UsersPage> {
   bool loading = true;
   final TextEditingController _searchController = TextEditingController();
 
-  final String baseUrl = 'http://127.0.0.1:8080/api/usuarios';
+  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/usuarios';
   final _formKey = GlobalKey<FormState>();
   String _nuevoNombre = '';
   String _nuevoCorreo = '';
