@@ -12,7 +12,7 @@ import 'solicitudes_red_page.dart';
 import 'gestion_solicitudes_red_page.dart';
 import 'mis_solicitudes_red_page.dart';
 import 'solicitudes_red_tecnico_page.dart';
-import 'mantenimientos_page.dart'; 
+import 'mantenimientos_page.dart';
 
 class HomePage extends StatelessWidget {
   final Session session;
@@ -123,7 +123,8 @@ class HomePage extends StatelessWidget {
                   crossAxisCount: 2,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
-                  childAspectRatio: 1.0,
+                  childAspectRatio:
+                      0.85, // <-- Proporción corregida (más altura)
                   children: _obtenerTarjetasSegunRol(context),
                 ),
               ),
@@ -144,7 +145,6 @@ class HomePage extends StatelessWidget {
   // --- Lógica de Tarjetas por Rol ---
   List<Widget> _obtenerTarjetasSegunRol(BuildContext context) {
     if (session.rol == 'ADMIN') {
-      // Menú exclusivo para Administradores
       return [
         _construirTarjeta(
           context: context,
@@ -201,7 +201,6 @@ class HomePage extends StatelessWidget {
             );
           },
         ),
-        // NUEVA TARJETA: Mantenimientos (ADMIN)
         _construirTarjeta(
           context: context,
           titulo: 'Cortes y\nMantenimientos',
@@ -211,13 +210,13 @@ class HomePage extends StatelessWidget {
           alPresionar: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => MantenimientosPage(session: session)),
+              MaterialPageRoute(
+                  builder: (_) => MantenimientosPage(session: session)),
             );
           },
         ),
       ];
     } else if (session.rol == 'TECNICO') {
-      // Menú exclusivo para Técnicos
       return [
         _construirTarjeta(
           context: context,
@@ -248,7 +247,6 @@ class HomePage extends StatelessWidget {
             );
           },
         ),
-        // NUEVA TARJETA: Mantenimientos (TÉCNICO)
         _construirTarjeta(
           context: context,
           titulo: 'Cortes y\nMantenimientos',
@@ -258,13 +256,13 @@ class HomePage extends StatelessWidget {
           alPresionar: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => MantenimientosPage(session: session)),
+              MaterialPageRoute(
+                  builder: (_) => MantenimientosPage(session: session)),
             );
           },
         ),
       ];
     } else {
-      // Menú para Clientes
       return [
         _construirTarjeta(
           context: context,
@@ -341,7 +339,6 @@ class HomePage extends StatelessWidget {
             );
           },
         ),
-        // NUEVA TARJETA: Mantenimientos (CLIENTE)
         _construirTarjeta(
           context: context,
           titulo: 'Cortes y\nMantenimientos',
@@ -351,7 +348,8 @@ class HomePage extends StatelessWidget {
           alPresionar: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => MantenimientosPage(session: session)),
+              MaterialPageRoute(
+                  builder: (_) => MantenimientosPage(session: session)),
             );
           },
         ),
@@ -376,24 +374,31 @@ class HomePage extends StatelessWidget {
         onTap: alPresionar,
         child: Container(
           decoration: BoxDecoration(color: colorFondo),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: const BoxDecoration(
                     color: Colors.white, shape: BoxShape.circle),
-                child: Icon(icono, size: 40, color: colorIcono),
+                child: Icon(icono, size: 35, color: colorIcono),
               ),
-              const SizedBox(height: 12),
-              Text(
-                titulo,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      titulo,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
