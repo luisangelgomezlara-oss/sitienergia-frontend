@@ -10,6 +10,7 @@ class IncidenciaAdminItem {
   final String descripcion;
   final String fecha;
   final String estado;
+  final String cuadrillaAsignada;
 
   IncidenciaAdminItem({
     required this.id,
@@ -18,6 +19,7 @@ class IncidenciaAdminItem {
     required this.descripcion,
     required this.fecha,
     required this.estado,
+    required this.cuadrillaAsignada,
   });
 }
 
@@ -35,6 +37,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
   List<IncidenciaAdminItem> reportes = [];
   List<IncidenciaAdminItem> filteredReportes = [];
 
+  // --- URL LOCAL CORREGIDA ---
   final String baseUrl = 'https://sitienergia-backend.onrender.com/api/incidencias';
   final String usuariosUrl = 'https://sitienergia-backend.onrender.com/api/usuarios';
 
@@ -64,14 +67,18 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
-        
+
         final list = data.map((item) {
-          final categoriaNombre = (item['categoria'] is Map) 
+          final categoriaNombre = (item['categoria'] is Map)
               ? item['categoria']['nombre'] ?? 'Sin categoría'
               : item['categoria']?.toString() ?? 'Falla Eléctrica';
-              
+
           final fechaCruda = item['fechaCreacion']?.toString() ?? '';
-          final fechaLimpia = fechaCruda.contains('T') ? fechaCruda.split('T')[0] : fechaCruda;
+          final fechaLimpia =
+              fechaCruda.contains('T') ? fechaCruda.split('T')[0] : fechaCruda;
+
+          final cuadrilla = item['cuadrillaAsignada']?.toString() ??
+              'Cuadrilla General de Emergencias';
 
           return IncidenciaAdminItem(
             id: item['id'],
@@ -80,12 +87,13 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
             descripcion: item['descripcion'] ?? 'Sin detalles',
             fecha: fechaLimpia,
             estado: item['estado'] ?? 'PENDIENTE',
+            cuadrillaAsignada: cuadrilla,
           );
         }).toList();
 
         if (mounted) {
           setState(() {
-            reportes = list.reversed.toList(); 
+            reportes = list.reversed.toList();
             filteredReportes = reportes;
             loading = false;
           });
@@ -96,7 +104,8 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
     } catch (e) {
       if (mounted) {
         setState(() => loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al cargar: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error al cargar: $e')));
       }
     }
   }
@@ -112,17 +121,19 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
       );
 
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Estado actualizado'), backgroundColor: Colors.green));
-        _cargarTodasLasIncidencias(); 
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Estado actualizado'),
+            backgroundColor: Colors.green));
+        _cargarTodasLasIncidencias();
       } else {
         throw Exception('Error al actualizar');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
   }
 
-  // --- NUEVA LÓGICA DE ASIGNACIÓN ---
   Future<void> _asignarTecnico(int incidenciaId, int tecnicoId) async {
     try {
       final response = await http.put(
@@ -134,17 +145,21 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
       );
 
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Técnico asignado exitosamente'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Técnico asignado exitosamente'),
+            backgroundColor: Colors.green));
         _cargarTodasLasIncidencias();
       } else {
         throw Exception('Error al asignar técnico');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
   }
 
-  Future<void> _abrirDialogoAsignar(int incidenciaId) async {
+  // --- FILTRO INTELIGENTE DE TÉCNICOS POR CUADRILLA LOCAL ---
+  Future<void> _abrirDialogoAsignar(IncidenciaAdminItem incidencia) async {
     try {
       final response = await http.get(
         Uri.parse(usuariosUrl),
@@ -156,53 +171,98 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
-        // Filtramos para mostrar solo a los técnicos que estén activos
-        final tecnicos = data.where((u) => u['rol'] == 'TECNICO' && u['activo'] == true).toList();
+
+        String especialidadRequerida = 'REDES ELECTRICAS';
+        if (incidencia.cuadrillaAsignada.toUpperCase().contains('OBRAS')) {
+          especialidadRequerida = 'OBRAS CIVILES';
+        } else if (incidencia.cuadrillaAsignada
+                .toUpperCase()
+                .contains('COMERCIAL') ||
+            incidencia.cuadrillaAsignada.toUpperCase().contains('CONTROL')) {
+          especialidadRequerida = 'COMERCIAL';
+        }
+
+        final tecnicos = data.where((u) {
+          if (u['rol'] != 'TECNICO' || u['activo'] != true) return false;
+          final espTecnico = u['especialidad']?.toString().toUpperCase() ?? '';
+          return espTecnico == especialidadRequerida;
+        }).toList();
 
         if (!mounted) return;
         showDialog(
           context: context,
           builder: (context) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text('Seleccionar Técnico', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xff176b87))),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Seleccionar Técnico',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xff176b87))),
+                  const SizedBox(height: 4),
+                  Text('Filtro: $especialidadRequerida',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold)),
+                ],
+              ),
               content: SizedBox(
                 width: double.maxFinite,
-                child: tecnicos.isEmpty 
-                  ? const Text('No hay técnicos registrados o activos.')
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: tecnicos.length,
-                      itemBuilder: (context, index) {
-                        final tec = tecnicos[index];
-                        return ListTile(
-                          leading: const CircleAvatar(backgroundColor: Colors.orangeAccent, child: Icon(Icons.handyman, color: Colors.white, size: 20)),
-                          title: Text(tec['nombre'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('ID: ${tec['telefono'] ?? 'N/A'}'),
-                          onTap: () {
-                            Navigator.pop(context); // Cierra el modal
-                            _asignarTecnico(incidenciaId, tec['id']); // Llama al PUT de tu backend
-                          },
-                        );
-                      },
-                    ),
+                child: tecnicos.isEmpty
+                    ? const Text(
+                        'No hay técnicos disponibles para esta cuadrilla.')
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: tecnicos.length,
+                        itemBuilder: (context, index) {
+                          final tec = tecnicos[index];
+                          final especialidad = tec['especialidad'] ?? 'General';
+
+                          return ListTile(
+                            leading: const CircleAvatar(
+                                backgroundColor: Colors.orangeAccent,
+                                child: Icon(Icons.handyman,
+                                    color: Colors.white, size: 20)),
+                            title: Text(tec['nombre'],
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
+                            subtitle: Text('Especialidad: $especialidad',
+                                style: const TextStyle(
+                                    color: Colors.blueGrey, fontSize: 12)),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _asignarTecnico(incidencia.id, tec['id']);
+                            },
+                          );
+                        },
+                      ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey)))
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancelar',
+                        style: TextStyle(color: Colors.grey)))
               ],
             );
           },
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error cargando técnicos: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error cargando técnicos: $e'),
+          backgroundColor: Colors.red));
     }
   }
 
   void _mostrarOpcionesEstado(IncidenciaAdminItem item) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         return SafeArea(
           child: Column(
@@ -210,20 +270,25 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
             children: [
               const Padding(
                 padding: EdgeInsets.all(16.0),
-                child: Text('Gestionar Incidencia', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: Text('Gestionar Incidencia',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
-              // Botón de asignación añadido arriba
               ListTile(
-                leading: const Icon(Icons.person_add_alt_1_rounded, color: Colors.blue),
-                title: const Text('ASIGNAR TÉCNICO', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                leading: const Icon(Icons.person_add_alt_1_rounded,
+                    color: Colors.blue),
+                title: const Text('ASIGNAR TÉCNICO',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.blue)),
                 onTap: () {
                   Navigator.pop(context);
-                  _abrirDialogoAsignar(item.id);
+                  _abrirDialogoAsignar(item);
                 },
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.access_time_rounded, color: Colors.red),
+                leading:
+                    const Icon(Icons.access_time_rounded, color: Colors.red),
                 title: const Text('Marcar como PENDIENTE'),
                 onTap: () {
                   Navigator.pop(context);
@@ -231,7 +296,8 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.engineering_rounded, color: Colors.orange),
+                leading:
+                    const Icon(Icons.engineering_rounded, color: Colors.orange),
                 title: const Text('Marcar como EN PROCESO'),
                 onTap: () {
                   Navigator.pop(context);
@@ -239,7 +305,8 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
+                leading: const Icon(Icons.check_circle_outline_rounded,
+                    color: Colors.green),
                 title: const Text('Marcar como RESUELTO'),
                 onTap: () {
                   Navigator.pop(context);
@@ -256,20 +323,26 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
   void _filterReportes() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      filteredReportes = reportes.where((r) =>
-        r.codigo.toLowerCase().contains(query) ||
-        r.categoria.toLowerCase().contains(query) ||
-        r.estado.toLowerCase().contains(query)
-      ).toList();
+      filteredReportes = reportes
+          .where((r) =>
+              r.codigo.toLowerCase().contains(query) ||
+              r.categoria.toLowerCase().contains(query) ||
+              r.estado.toLowerCase().contains(query) ||
+              r.cuadrillaAsignada.toLowerCase().contains(query))
+          .toList();
     });
   }
 
   Color _getColorEstado(String estado) {
     switch (estado.toUpperCase()) {
-      case 'PENDIENTE': return Colors.red[700]!;
-      case 'EN_PROCESO': return Colors.orange[800]!;
-      case 'RESUELTO': return Colors.green[700]!;
-      default: return Colors.blueGrey;
+      case 'PENDIENTE':
+        return Colors.red[700]!;
+      case 'EN_PROCESO':
+        return Colors.orange[800]!;
+      case 'RESUELTO':
+        return Colors.green[700]!;
+      default:
+        return Colors.blueGrey;
     }
   }
 
@@ -278,7 +351,8 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Gestión de Incidencias', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Gestión de Incidencias',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xff176b87),
         foregroundColor: Colors.white,
       ),
@@ -296,13 +370,16 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
                       fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none),
                     ),
                   ),
                 ),
                 Expanded(
                   child: filteredReportes.isEmpty
-                      ? const Center(child: Text('No hay incidencias registradas.'))
+                      ? const Center(
+                          child: Text('No hay incidencias registradas.'))
                       : ListView.builder(
                           padding: const EdgeInsets.all(16),
                           itemCount: filteredReportes.length,
@@ -312,24 +389,65 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
 
                             return Card(
                               margin: const EdgeInsets.only(bottom: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
                               child: ListTile(
                                 contentPadding: const EdgeInsets.all(16),
-                                title: Text(item.codigo, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xff176b87))),
+                                title: Text(item.codigo,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xff176b87))),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const SizedBox(height: 8),
-                                    Text(item.categoria, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                                    Text(item.categoria,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87)),
                                     Text(item.descripcion),
                                     const SizedBox(height: 8),
-                                    Text('Fecha: ${item.fecha}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                    Text('Fecha: ${item.fecha}',
+                                        style: const TextStyle(
+                                            fontSize: 12, color: Colors.grey)),
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue[50],
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                            color:
+                                                Colors.blue.withOpacity(0.3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.engineering,
+                                              size: 16,
+                                              color: Color(0xff176b87)),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              item.cuadrillaAsignada,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xff176b87),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 trailing: InkWell(
                                   onTap: () => _mostrarOpcionesEstado(item),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
                                     decoration: BoxDecoration(
                                       color: colorEstado.withOpacity(0.12),
                                       borderRadius: BorderRadius.circular(12),
@@ -338,9 +456,14 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Text(item.estado, style: TextStyle(color: colorEstado, fontSize: 12, fontWeight: FontWeight.bold)),
+                                        Text(item.estado,
+                                            style: TextStyle(
+                                                color: colorEstado,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold)),
                                         const SizedBox(width: 4),
-                                        Icon(Icons.edit, size: 14, color: colorEstado),
+                                        Icon(Icons.edit,
+                                            size: 14, color: colorEstado),
                                       ],
                                     ),
                                   ),

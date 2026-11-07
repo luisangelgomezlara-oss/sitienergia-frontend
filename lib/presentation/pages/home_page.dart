@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import '../../domain/entities/session.dart';
 import 'login_page.dart';
 import 'reportar_falla_page.dart';
-// Importa tus pantallas de administrador y técnico
 import 'users_page.dart';
 import 'categories_page.dart';
 import 'mis_reportes_page.dart';
 import 'gestion_incidencias_page.dart';
 import 'puntos_atencion_page.dart';
-import 'solicitudes_tramites_page.dart';
 import 'mis_asignaciones_page.dart';
+import 'solicitudes_red_page.dart';
+import 'gestion_solicitudes_red_page.dart';
+import 'mis_solicitudes_red_page.dart';
+import 'solicitudes_red_tecnico_page.dart';
+import 'mantenimientos_page.dart'; 
 
 class HomePage extends StatelessWidget {
   final Session session;
@@ -184,6 +187,34 @@ class HomePage extends StatelessWidget {
             );
           },
         ),
+        _construirTarjeta(
+          context: context,
+          titulo: 'Solicitudes\nde Red',
+          icono: Icons.build_circle_outlined,
+          colorFondo: Colors.teal[50]!,
+          colorIcono: Colors.teal[700]!,
+          alPresionar: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => GestionSolicitudesRedPage(session: session)),
+            );
+          },
+        ),
+        // NUEVA TARJETA: Mantenimientos (ADMIN)
+        _construirTarjeta(
+          context: context,
+          titulo: 'Cortes y\nMantenimientos',
+          icono: Icons.power_off_outlined,
+          colorFondo: Colors.amber[50]!,
+          colorIcono: Colors.amber[700]!,
+          alPresionar: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => MantenimientosPage(session: session)),
+            );
+          },
+        ),
       ];
     } else if (session.rol == 'TECNICO') {
       // Menú exclusivo para Técnicos
@@ -197,7 +228,37 @@ class HomePage extends StatelessWidget {
           alPresionar: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => MisAsignacionesPage(session: session)),
+              MaterialPageRoute(
+                  builder: (_) => MisAsignacionesPage(session: session)),
+            );
+          },
+        ),
+        _construirTarjeta(
+          context: context,
+          titulo: 'Órdenes de\nRed',
+          icono: Icons.electrical_services_outlined,
+          colorFondo: Colors.teal[50]!,
+          colorIcono: Colors.teal[700]!,
+          alPresionar: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SolicitudesRedTecnicoPage(session: session),
+              ),
+            );
+          },
+        ),
+        // NUEVA TARJETA: Mantenimientos (TÉCNICO)
+        _construirTarjeta(
+          context: context,
+          titulo: 'Cortes y\nMantenimientos',
+          icono: Icons.power_off_outlined,
+          colorFondo: Colors.amber[50]!,
+          colorIcono: Colors.amber[700]!,
+          alPresionar: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => MantenimientosPage(session: session)),
             );
           },
         ),
@@ -243,7 +304,27 @@ class HomePage extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => const SolicitudesTramitesPage()),
+                builder: (_) => SolicitudesRedPage(
+                  token: session.token,
+                  cedulaCliente: '',
+                  nicCliente: '',
+                ),
+              ),
+            );
+          },
+        ),
+        _construirTarjeta(
+          context: context,
+          titulo: 'Mis Solicitudes\nde Red',
+          icono: Icons.history_edu_outlined,
+          colorFondo: Colors.cyan[50]!,
+          colorIcono: Colors.cyan[700]!,
+          alPresionar: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MisSolicitudesRedPage(session: session),
+              ),
             );
           },
         ),
@@ -257,6 +338,20 @@ class HomePage extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const PuntosAtencionPage()),
+            );
+          },
+        ),
+        // NUEVA TARJETA: Mantenimientos (CLIENTE)
+        _construirTarjeta(
+          context: context,
+          titulo: 'Cortes y\nMantenimientos',
+          icono: Icons.power_off_outlined,
+          colorFondo: Colors.amber[50]!,
+          colorIcono: Colors.amber[700]!,
+          alPresionar: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => MantenimientosPage(session: session)),
             );
           },
         ),

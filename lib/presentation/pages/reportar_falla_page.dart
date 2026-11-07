@@ -21,20 +21,52 @@ class _ReportarFallaPageState extends State<ReportarFallaPage> {
   bool _cargandoUbicacion = true;
   bool _enviando = false;
   
-  String? _tipoDanoSeleccionado;
+  List<dynamic> _categoriasDB = [];
+  int? _categoriaIdSeleccionada;
+  String? _tipoDanoSeleccionadoNombre; 
   String? _detalleDanoSeleccionado;
+  
   final TextEditingController _nicController = TextEditingController();
   final TextEditingController _referenciaController = TextEditingController();
   final TextEditingController _contactoController = TextEditingController();
   File? _imagenEvidencia;
   
-  final List<String> _tiposDeDano = ['Infraestructura (Postes/Cables)', 'Medidor / Acometida', 'Transformador', 'Alumbrado Público'];
-  final List<String> _detallesDano = ['Poste a punto de caer', 'Cables reventados en vía', 'Medidor echando chispas', 'Sin energía en el sector', 'Luminaria apagada'];
+  final Map<String, List<String>> _detallesPorCategoria = {
+    'Falla en red de baja tensión': ['Cables reventados', 'Fluctuación de voltaje', 'Sin energía en un sector'],
+    'Transformador averiado': ['Humo/Fuego en poste', 'Líquido derramado', 'Sonido fuerte/Explosión'],
+    'Cortocircuito en líneas de distribución': ['Chispas fuertes', 'Cables haciendo contacto'],
+    'Poste averiado / caído': ['Poste inclinado', 'Poste en el suelo', 'Poste chocado por vehículo'],
+    'Daño en infraestructura de soportes': ['Cruceta rota', 'Tensores sueltos', 'Estructura colgando'],
+    'Riesgo por árboles sobre redes': ['Ramas tocando cables', 'Árbol caído sobre red'],
+    'Revisión de medidor': ['Medidor apagado', 'Pantalla rota', 'Medidor quemado'],
+    'Anomalías en facturación / acometida': ['Acometida sulfatada', 'Cable de entrada roto'],
+    'Fraude o manipulación de medida': ['Conexión directa', 'Sello de seguridad roto', 'Cables puenteados']
+  };
 
   @override
   void initState() {
     super.initState();
     _obtenerUbicacionActual();
+    _cargarCategoriasDesdeBD();
+  }
+
+  Future<void> _cargarCategoriasDesdeBD() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://sitienergia-backend.onrender.com/api/categorias'),
+        headers: {'Authorization': 'Bearer ${widget.session.token}'}
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (mounted) {
+          setState(() {
+            _categoriasDB = data.where((c) => c['activa'] == true).toList();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error cargando categorías: $e');
+    }
   }
 
   Future<void> _obtenerUbicacionActual() async {
@@ -72,7 +104,7 @@ class _ReportarFallaPageState extends State<ReportarFallaPage> {
   }
 
   Future<void> _enviarReporte() async {
-    if (_tipoDanoSeleccionado == null || _nicController.text.isEmpty || _referenciaController.text.isEmpty) {
+    if (_categoriaIdSeleccionada == null || _detalleDanoSeleccionado == null || _nicController.text.isEmpty || _referenciaController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Faltan campos requeridos'), backgroundColor: Colors.red));
       return;
     }
@@ -85,8 +117,6 @@ class _ReportarFallaPageState extends State<ReportarFallaPage> {
         final bytes = await _imagenEvidencia!.readAsBytes();
         imagenBase64 = base64Encode(bytes);
       }
-
-      int categoriaId = _tiposDeDano.indexOf(_tipoDanoSeleccionado!) + 1;
       
       final response = await http.post(
         Uri.parse('https://sitienergia-backend.onrender.com/api/incidencias'), 
@@ -95,9 +125,9 @@ class _ReportarFallaPageState extends State<ReportarFallaPage> {
           'Authorization': 'Bearer ${widget.session.token}'
         },
         body: jsonEncode({
-          "categoriaId": categoriaId,
+          "categoriaId": _categoriaIdSeleccionada,
           "nic": _nicController.text,
-          "descripcion": "${_detalleDanoSeleccionado ?? ''} - ${_referenciaController.text}",
+          "descripcion": "$_detalleDanoSeleccionado - ${_referenciaController.text}",
           "ubicacion": "${_centerLatLng.latitude}, ${_centerLatLng.longitude}",
           "latitud": _centerLatLng.latitude,
           "longitud": _centerLatLng.longitude,
@@ -183,12 +213,35 @@ class _ReportarFallaPageState extends State<ReportarFallaPage> {
                 children: [
                   const Text('Tipo de daño', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    decoration: InputDecoration(filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                  
+                  // DROPDOWN CON TEXTO AJUSTADO (Evita overflow con Expanded)
+                  DropdownButtonFormField<int>(
+                    decoration: InputDecoration(
+                      filled: true, 
+                      fillColor: Colors.white, 
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
                     hint: const Text('Seleccione aquí'),
-                    value: _tipoDanoSeleccionado,
-                    items: _tiposDeDano.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                    onChanged: (val) => setState(() => _tipoDanoSeleccionado = val),
+                    isExpanded: true, // Vital para que respete los límites
+                    value: _categoriaIdSeleccionada,
+                    items: _categoriasDB.map((cat) {
+                      return DropdownMenuItem<int>(
+                        value: cat['id'],
+                        child: Text(
+                          cat['nombre'],
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (int? newValue) {
+                      setState(() {
+                        _categoriaIdSeleccionada = newValue;
+                        final catSeleccionada = _categoriasDB.firstWhere((c) => c['id'] == newValue);
+                        _tipoDanoSeleccionadoNombre = catSeleccionada['nombre'];
+                        _detalleDanoSeleccionado = null; 
+                      });
+                    },
                   ),
                   const SizedBox(height: 16),
 
@@ -203,12 +256,33 @@ class _ReportarFallaPageState extends State<ReportarFallaPage> {
 
                   const Text('Detalle del daño', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
+                  
                   DropdownButtonFormField<String>(
-                    decoration: InputDecoration(filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-                    hint: const Text('Seleccione aquí'),
+                    decoration: InputDecoration(
+                      filled: true, 
+                      fillColor: Colors.white, 
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                    hint: const Text('Seleccione detalle'),
+                    isExpanded: true,
                     value: _detalleDanoSeleccionado,
-                    items: _detallesDano.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-                    onChanged: (val) => setState(() => _detalleDanoSeleccionado = val),
+                    items: _tipoDanoSeleccionadoNombre == null 
+                        ? [] 
+                        : (_detallesPorCategoria[_tipoDanoSeleccionadoNombre] ?? ['Falla general reportada']).map((String detail) {
+                            return DropdownMenuItem<String>(
+                              value: detail,
+                              child: Text(
+                                detail,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        _detalleDanoSeleccionado = newValue;
+                      });
+                    },
                   ),
                   const SizedBox(height: 16),
 

@@ -19,13 +19,16 @@ class _UsersPageState extends State<UsersPage> {
   bool loading = true;
   final TextEditingController _searchController = TextEditingController();
 
-  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/usuarios';
+  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/usuarios'; 
+  
   final _formKey = GlobalKey<FormState>();
   String _nuevoNombre = '';
   String _nuevoCorreo = '';
+  String _nuevaCedula = ''; 
   String _nuevoTelefono = ''; 
   String _nuevoPassword = '';
   String _nuevoRol = 'TECNICO';
+  String _nuevaEspecialidad = 'REDES ELECTRICAS';
   bool _isCreating = false;
 
   @override 
@@ -49,22 +52,35 @@ class _UsersPageState extends State<UsersPage> {
       filteredItems = items.where((u) => 
         u.nombre.toLowerCase().contains(query) || 
         u.telefono.contains(query) || 
-        u.rol.toLowerCase().contains(query)
+        (u.cedula != null && u.cedula!.contains(query)) ||
+        u.rol.toLowerCase().contains(query) ||
+        (u.especialidad != null && u.especialidad!.toLowerCase().contains(query))
       ).toList();
     });
   }
 
   Future<void> refresh() async {
+    setState(() => loading = true);
     try { 
-      final data = await UserRepositoryImpl(remoteDatasource: UserRemoteDatasource()).getUsers(widget.session.token); 
-      if (mounted) setState(() { 
-        items = data; 
-        filteredItems = data;
-        loading = false; 
-        _filterUsers();
-      }); 
-    }
-    catch (e) { 
+      final response = await http.get(
+        Uri.parse(baseUrl),
+        headers: {'Authorization': 'Bearer ${widget.session.token}'}
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+        final list = data.map((item) => User.fromJson(item)).toList();
+        if (mounted) {
+          setState(() { 
+            items = list; 
+            filteredItems = list;
+            loading = false; 
+            _filterUsers();
+          });
+        }
+      } else {
+        throw Exception('Error del servidor: ${response.statusCode}');
+      }
+    } catch (e) { 
       if (mounted) { setState(() => loading = false); message(e); } 
     }
   }
@@ -87,7 +103,9 @@ class _UsersPageState extends State<UsersPage> {
           'email': _nuevoCorreo,
           'password': _nuevoPassword,
           'rol': _nuevoRol,
+          'cedula': _nuevaCedula, 
           'telefono': _nuevoTelefono, 
+          'especialidad': _nuevoRol == 'TECNICO' ? _nuevaEspecialidad : null,
         }),
       );
 
@@ -102,7 +120,7 @@ class _UsersPageState extends State<UsersPage> {
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error de conexión local: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _isCreating = false);
@@ -111,6 +129,7 @@ class _UsersPageState extends State<UsersPage> {
 
   void _mostrarFormularioCreacion() {
     _nuevoRol = 'TECNICO';
+    _nuevaEspecialidad = 'REDES ELECTRICAS';
     
     showModalBottomSheet(
       context: context,
@@ -138,6 +157,13 @@ class _UsersPageState extends State<UsersPage> {
                       TextFormField(
                         decoration: const InputDecoration(labelText: 'Identificación (Cédula)', border: OutlineInputBorder()),
                         keyboardType: TextInputType.number,
+                        onSaved: (val) => _nuevaCedula = val ?? '',
+                        validator: (val) => val!.isEmpty ? 'Requerido' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        decoration: const InputDecoration(labelText: 'Teléfono', border: OutlineInputBorder()),
+                        keyboardType: TextInputType.phone,
                         onSaved: (val) => _nuevoTelefono = val ?? '',
                         validator: (val) => val!.isEmpty ? 'Requerido' : null,
                       ),
@@ -165,12 +191,32 @@ class _UsersPageState extends State<UsersPage> {
                             isExpanded: true, 
                             items: const [
                               DropdownMenuItem(value: 'TECNICO', child: Text('TÉCNICO')), 
-                              DropdownMenuItem(value: 'ADMIN', child: Text('ADMINISTRADOR'))
+                              DropdownMenuItem(value: 'ADMIN', child: Text('ADMINISTRADOR')),
+                              DropdownMenuItem(value: 'CLIENTE', child: Text('CLIENTE'))
                             ], 
                             onChanged: (val) { if (val != null) setModalState(() => _nuevoRol = val); }
                           ),
                         ),
                       ),
+                      if (_nuevoRol == 'TECNICO') ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _nuevaEspecialidad,
+                              isExpanded: true,
+                              items: const [
+                                DropdownMenuItem(value: 'REDES ELECTRICAS', child: Text('REDES ELECTRICAS')),
+                                DropdownMenuItem(value: 'OBRAS CIVILES', child: Text('OBRAS CIVILES')),
+                                DropdownMenuItem(value: 'COMERCIAL', child: Text('COMERCIAL')),
+                              ],
+                              onChanged: (val) { if (val != null) setModalState(() => _nuevaEspecialidad = val); },
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
@@ -201,9 +247,11 @@ class _UsersPageState extends State<UsersPage> {
   
   Future<void> edit(User item) async {
     final name = TextEditingController(text: item.nombre);
+    final cedula = TextEditingController(text: item.cedula ?? '');
     final phone = TextEditingController(text: item.telefono);
     String role = item.rol;
     bool active = item.activo;
+    String? especialidad = item.especialidad ?? 'REDES ELECTRICAS';
     
     final ok = await showDialog<bool>(
       context: context, 
@@ -211,13 +259,15 @@ class _UsersPageState extends State<UsersPage> {
         builder: (context, setDialog) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('Editar usuario', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xff176b87))), 
-          content: SingleChildScrollView( // <-- WIDGET AGREGADO PARA EVITAR OVERFLOW
+          content: SingleChildScrollView( 
             child: Column(
               mainAxisSize: MainAxisSize.min, 
               children: [
                 TextField(controller: name, decoration: const InputDecoration(labelText: 'Nombre', border: OutlineInputBorder())), 
                 const SizedBox(height: 16), 
-                TextField(controller: phone, decoration: const InputDecoration(labelText: 'Identificación / Teléfono', border: OutlineInputBorder())), 
+                TextField(controller: cedula, decoration: const InputDecoration(labelText: 'Identificación (Cédula)', border: OutlineInputBorder())), 
+                const SizedBox(height: 16), 
+                TextField(controller: phone, decoration: const InputDecoration(labelText: 'Teléfono', border: OutlineInputBorder())), 
                 const SizedBox(height: 16), 
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -235,6 +285,25 @@ class _UsersPageState extends State<UsersPage> {
                     ),
                   ),
                 ), 
+                if (role == 'TECNICO') ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: especialidad,
+                        isExpanded: true,
+                        items: const [
+                          DropdownMenuItem(value: 'REDES ELECTRICAS', child: Text('REDES ELECTRICAS')),
+                          DropdownMenuItem(value: 'OBRAS CIVILES', child: Text('OBRAS CIVILES')),
+                          DropdownMenuItem(value: 'COMERCIAL', child: Text('COMERCIAL')),
+                        ],
+                        onChanged: (val) { if (val != null) setDialog(() => especialidad = val); },
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 SwitchListTile(title: const Text('Usuario Activo'), value: active, onChanged: (val) => setDialog(() => active = val), contentPadding: EdgeInsets.zero)
               ]
@@ -253,8 +322,27 @@ class _UsersPageState extends State<UsersPage> {
     );
     if (ok == true) { 
       try { 
-        await UserRepositoryImpl(remoteDatasource: UserRemoteDatasource()).updateUser(widget.session.token, item.id, name.text, role, phone.text, active); 
-        refresh(); 
+        final response = await http.put(
+          Uri.parse('$baseUrl/${item.id}'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${widget.session.token}'
+          },
+          body: jsonEncode({
+            'nombre': name.text,
+            'rol': role,
+            'cedula': cedula.text,
+            'telefono': phone.text,
+            'activo': active,
+            'especialidad': role == 'TECNICO' ? especialidad : null,
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          refresh(); 
+        } else {
+          throw Exception('Error al actualizar. Servidor dice: ${response.statusCode}');
+        }
       } catch (e) { message(e); } 
     }
   }
@@ -278,8 +366,15 @@ class _UsersPageState extends State<UsersPage> {
     );
     if (ok == true) { 
       try { 
-        await UserRepositoryImpl(remoteDatasource: UserRemoteDatasource()).deleteUser(widget.session.token, item.id); 
-        refresh(); 
+        final response = await http.delete(
+          Uri.parse('$baseUrl/${item.id}'),
+          headers: {'Authorization': 'Bearer ${widget.session.token}'}
+        );
+        if (response.statusCode == 204 || response.statusCode == 200) {
+          refresh(); 
+        } else {
+          throw Exception('Error al desactivar');
+        }
       } catch (e) { message(e); } 
     }
   }
@@ -341,7 +436,9 @@ class _UsersPageState extends State<UsersPage> {
                     itemBuilder: (context, index) {
                       final item = filteredItems[index];
                       final inicial = item.nombre.isNotEmpty ? item.nombre[0].toUpperCase() : '?';
-                      final textoTelefono = item.telefono.isEmpty ? 'Sin identificación' : item.telefono;
+                      
+                      final textoCedula = (item.cedula != null && item.cedula!.isNotEmpty) ? 'C.C: ${item.cedula}' : 'Sin Cédula';
+                      final textoTelefono = item.telefono.isNotEmpty ? 'Tel: ${item.telefono}' : 'Sin Teléfono';
                       final colorRol = _getColorPorRol(item.rol);
 
                       return Container(
@@ -368,13 +465,26 @@ class _UsersPageState extends State<UsersPage> {
                                   children: [
                                     Text(item.nombre, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
                                     const SizedBox(height: 4),
-                                    Text(textoTelefono, style: const TextStyle(fontSize: 14, color: Colors.black54)),
+                                    Text('$textoCedula  •  $textoTelefono', style: const TextStyle(fontSize: 13, color: Colors.black54)),
                                     const SizedBox(height: 6),
                                     
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(color: colorRol, borderRadius: BorderRadius.circular(8)),
-                                      child: Text(item.rol.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                    // --- FIX: Cambiamos Row por Wrap para evitar el Overflow ---
+                                    Wrap(
+                                      spacing: 6, // Espacio horizontal entre etiquetas
+                                      runSpacing: 4, // Espacio vertical si se bajan de línea
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(color: colorRol, borderRadius: BorderRadius.circular(8)),
+                                          child: Text(item.rol.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                        ),
+                                        if (item.rol.toUpperCase() == 'TECNICO' && item.especialidad != null)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.withOpacity(0.3))),
+                                            child: Text(item.especialidad!, style: const TextStyle(color: Color(0xff176b87), fontSize: 10, fontWeight: FontWeight.bold)),
+                                          ),
+                                      ],
                                     )
                                   ],
                                 ),

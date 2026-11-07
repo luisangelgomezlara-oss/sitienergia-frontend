@@ -44,15 +44,6 @@ class PuntosAtencionPage extends StatelessWidget {
             Icons.storefront, 
             Colors.green
           ),
-
-          const SizedBox(height: 20),
-          _buildSectionTitle('Mantenimientos Programados', Icons.build_circle),
-          _buildInfoCard(
-            'Corte Programado - Sector Centro', 
-            'Fecha: 25 de Octubre, 8:00 AM - 2:00 PM\nMotivo: Poda de árboles cerca a redes de media tensión y cambio de cableado.', 
-            Icons.warning_amber_rounded, 
-            Colors.red
-          ),
         ],
       ),
     );
