@@ -13,6 +13,7 @@ class SolicitudRedAdminItem {
   final String motivo;
   final String fechaCreacion;
   final String estado;
+  final String conceptoTecnico;
   final Map<String, dynamic> detallesEspecificos;
 
   SolicitudRedAdminItem({
@@ -25,6 +26,7 @@ class SolicitudRedAdminItem {
     required this.motivo,
     required this.fechaCreacion,
     required this.estado,
+    required this.conceptoTecnico,
     required this.detallesEspecificos,
   });
 
@@ -63,6 +65,7 @@ class SolicitudRedAdminItem {
       motivo: json['motivo'] ?? 'Sin motivo',
       fechaCreacion: fechaLimpia,
       estado: json['estado'] ?? 'RADICADA',
+      conceptoTecnico: json['conceptoTecnico']?.toString() ?? '',
       detallesEspecificos: detalles,
     );
   }
@@ -83,7 +86,8 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
   List<SolicitudRedAdminItem> solicitudes = [];
   List<SolicitudRedAdminItem> filteredSolicitudes = [];
 
-  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/solicitudes-red';
+  final String baseUrl =
+      'https://sitienergia-backend.onrender.com/api/solicitudes-red';
 
   @override
   void initState() {
@@ -98,7 +102,6 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
     super.dispose();
   }
 
-  // Normalización para ignorar tildes y mayúsculas
   String _normalizarTexto(String texto) {
     return texto
         .toLowerCase()
@@ -110,7 +113,6 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
         .trim();
   }
 
-  // Extracción flexible del área del técnico (anidada o directa)
   String _obtenerAreaTecnico(dynamic u) {
     if (u == null) return '';
     if (u['area'] is String) return u['area'];
@@ -247,7 +249,8 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
           builder: (context, setStateModal) {
             if (cargandoTecnicos) {
               http.get(
-                Uri.parse('https://sitienergia-backend.onrender.com/api/usuarios'),
+                Uri.parse(
+                    'https://sitienergia-backend.onrender.com/api/usuarios'),
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': 'Bearer ${widget.session.token}'
@@ -260,13 +263,11 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
                     setStateModal(() {
                       final areaTargetNorm = _normalizarTexto(item.area);
 
-                      // 1. Filtrar solo usuarios con rol TECNICO
                       final soloTecnicos = data
                           .where((u) =>
                               (u['rol'] == 'TECNICO' || u['role'] == 'TECNICO'))
                           .toList();
 
-                      // 2. Coincidencia de área ignorando tildes y mayúsculas
                       listaTecnicosFiltrados = soloTecnicos.where((u) {
                         final areaTecnicoNorm =
                             _normalizarTexto(_obtenerAreaTecnico(u));
@@ -275,7 +276,6 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
                             areaTargetNorm.contains(areaTecnicoNorm);
                       }).toList();
 
-                      // 3. Fallback: Si no hay coincidencia exacta por área, mostrar todos los técnicos
                       if (listaTecnicosFiltrados.isEmpty &&
                           soloTecnicos.isNotEmpty) {
                         listaTecnicosFiltrados = soloTecnicos;
@@ -287,12 +287,14 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
                     });
                   }
                 } else {
-                  if (context.mounted)
+                  if (context.mounted) {
                     setStateModal(() => cargandoTecnicos = false);
+                  }
                 }
               }).catchError((_) {
-                if (context.mounted)
+                if (context.mounted) {
                   setStateModal(() => cargandoTecnicos = false);
+                }
               });
             }
 
@@ -521,6 +523,9 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
                           itemBuilder: (context, index) {
                             final item = filteredSolicitudes[index];
                             final colorEstado = _getColorEstado(item.estado);
+                            final esNoViable = item.conceptoTecnico
+                                .toUpperCase()
+                                .contains('[NO VIABLE]');
 
                             return Card(
                               margin: const EdgeInsets.only(bottom: 12),
@@ -640,6 +645,72 @@ class _GestionSolicitudesRedPageState extends State<GestionSolicitudesRedPage> {
                                                         fontSize: 12,
                                                         color:
                                                             Colors.black87))),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    if (item.conceptoTecnico.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: esNoViable
+                                              ? Colors.red[50]
+                                              : Colors.teal[50],
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: esNoViable
+                                                ? Colors.red[200]!
+                                                : Colors.teal[200]!,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Icon(
+                                              esNoViable
+                                                  ? Icons.warning_amber_rounded
+                                                  : Icons.engineering,
+                                              size: 18,
+                                              color: esNoViable
+                                                  ? Colors.red[800]
+                                                  : Colors.teal[800],
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    'Dictamen / Concepto Técnico:',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: esNoViable
+                                                          ? Colors.red[900]
+                                                          : Colors.teal[900],
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    item.conceptoTecnico,
+                                                    style: TextStyle(
+                                                      fontSize: 12.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: esNoViable
+                                                          ? Colors.red[900]
+                                                          : Colors.teal[900],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ),

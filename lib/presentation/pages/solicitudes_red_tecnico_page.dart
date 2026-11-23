@@ -86,7 +86,8 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
   bool loading = true;
   List<SolicitudRedTecnicoItem> solicitudesAsignadas = [];
 
-  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/solicitudes-red';
+  final String baseUrl =
+      'https://sitienergia-backend.onrender.com/api/solicitudes-red';
 
   @override
   void initState() {
@@ -94,16 +95,10 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
     _cargarSolicitudesAsignadas();
   }
 
-  int _obtenerIdTecnico() {
-    // Forzamos el ID 17 que es donde está asignada la orden en la BD
-    return 17;
-  }
-
   Future<void> _cargarSolicitudesAsignadas() async {
     setState(() => loading = true);
     try {
-      final tecnicoId = _obtenerIdTecnico();
-      final url = Uri.parse('$baseUrl/cuadrilla/$tecnicoId');
+      final url = Uri.parse('$baseUrl/mis-asignaciones');
 
       final response = await http.get(
         url,
@@ -137,8 +132,8 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
     }
   }
 
-  Future<void> _finalizarSolicitud(
-      int id, String nuevoEstado, String concepto) async {
+  Future<void> _enviarActualizacion(
+      int id, String nuevoEstado, String concepto, String mensajeExito) async {
     try {
       final queryParams = Uri(queryParameters: {
         'estado': nuevoEstado,
@@ -158,8 +153,8 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
       if (response.statusCode == 200 || response.statusCode == 204) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Orden finalizada correctamente'),
+            SnackBar(
+              content: Text(mensajeExito),
               backgroundColor: Colors.green,
             ),
           );
@@ -179,6 +174,121 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
     }
   }
 
+  // Diálogo 1: Concepto de Viabilidad Técnica para aprobación del Admin
+  void _mostrarDialogoViabilidad(SolicitudRedTecnicoItem item) {
+    final TextEditingController conceptoController = TextEditingController();
+    bool esViable = true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Text(
+                'Viabilidad Técnica SOL-${item.id.toString().padLeft(4, '0')}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Resultado de la inspección en terreno:',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('ES VIABLE')),
+                          selected: esViable,
+                          selectedColor: Colors.green[100],
+                          labelStyle: TextStyle(
+                            color:
+                                esViable ? Colors.green[900] : Colors.black87,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          onSelected: (_) =>
+                              setDialogState(() => esViable = true),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('NO VIABLE')),
+                          selected: !esViable,
+                          selectedColor: Colors.red[100],
+                          labelStyle: TextStyle(
+                            color: !esViable ? Colors.red[900] : Colors.black87,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          onSelected: (_) =>
+                              setDialogState(() => esViable = false),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: conceptoController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText:
+                          'Ej: Se requiere grúa y poste de 12m, acceso despejado...',
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange[800]),
+                  onPressed: () {
+                    final texto = conceptoController.text.trim();
+                    if (texto.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content:
+                                Text('Debes detallar el concepto técnico.')),
+                      );
+                      return;
+                    }
+                    final prefijo = esViable ? '[VIABLE]' : '[NO VIABLE]';
+                    Navigator.pop(ctx);
+                    _enviarActualizacion(
+                      item.id,
+                      'EN_REVISION',
+                      '$prefijo $texto',
+                      'Concepto enviado al Administrador para aprobación',
+                    );
+                  },
+                  child: const Text('Enviar al Admin',
+                      style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Diálogo 2: Finalizar trabajo ya ejecutado
   void _mostrarDialogoFinalizar(SolicitudRedTecnicoItem item) {
     final TextEditingController conceptoController = TextEditingController();
 
@@ -233,7 +343,12 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
                   return;
                 }
                 Navigator.pop(ctx);
-                _finalizarSolicitud(item.id, 'COMPLETADO', concepto);
+                _enviarActualizacion(
+                  item.id,
+                  'COMPLETADO',
+                  concepto,
+                  'Orden finalizada correctamente',
+                );
               },
               child: const Text('Completar Trabajo',
                   style: TextStyle(color: Colors.white)),
@@ -246,10 +361,16 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
 
   Color _getColorEstado(String estado) {
     switch (estado.toUpperCase()) {
+      case 'EN_REVISION':
+        return Colors.orange[800]!;
+      case 'APROBADO':
+        return Colors.blue[700]!;
       case 'EN_EJECUCION':
         return Colors.purple[700]!;
       case 'COMPLETADO':
         return Colors.green[700]!;
+      case 'RECHAZADO':
+        return Colors.red[700]!;
       default:
         return Colors.blueGrey;
     }
@@ -286,6 +407,8 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
                   itemBuilder: (context, index) {
                     final item = solicitudesAsignadas[index];
                     final colorEstado = _getColorEstado(item.estado);
+                    final esActiva = item.estado != 'COMPLETADO' &&
+                        item.estado != 'RECHAZADO';
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -402,35 +525,76 @@ class _SolicitudesRedTecnicoPageState extends State<SolicitudesRedTecnicoPage> {
                             ],
                             if (item.conceptoTecnico.isNotEmpty) ...[
                               const SizedBox(height: 8),
-                              Text(
-                                'Concepto Registrado: ${item.conceptoTecnico}',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    fontStyle: FontStyle.italic,
-                                    color: Colors.teal),
-                              ),
-                            ],
-                            const SizedBox(height: 12),
-                            if (item.estado == 'EN_EJECUCION')
-                              SizedBox(
+                              Container(
                                 width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF1E6070),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Concepto Técnico: ${item.conceptoTecnico}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.teal[900],
                                   ),
-                                  icon: const Icon(Icons.check_circle_outline,
-                                      color: Colors.white),
-                                  label: const Text(
-                                    'Finalizar Trabajo / Concepto',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  onPressed: () =>
-                                      _mostrarDialogoFinalizar(item),
                                 ),
                               ),
+                            ],
+                            if (esActiva) ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.orange[800],
+                                        side: BorderSide(
+                                            color: Colors.orange[800]!),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      icon: const Icon(
+                                          Icons.fact_check_outlined,
+                                          size: 18),
+                                      label: const Text(
+                                        'Viabilidad',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                      onPressed: () =>
+                                          _mostrarDialogoViabilidad(item),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF1E6070),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      icon: const Icon(
+                                          Icons.check_circle_outline,
+                                          size: 18,
+                                          color: Colors.white),
+                                      label: const Text(
+                                        'Completar',
+                                        style: TextStyle(
+                                            color: Colors.white, fontSize: 13),
+                                      ),
+                                      onPressed: () =>
+                                          _mostrarDialogoFinalizar(item),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
