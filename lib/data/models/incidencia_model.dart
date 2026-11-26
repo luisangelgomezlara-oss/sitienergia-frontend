@@ -1,3 +1,4 @@
+// ignore: unused_import
 import 'dart:convert';
 
 class IncidenciaModel {
