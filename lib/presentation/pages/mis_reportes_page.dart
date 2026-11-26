@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../domain/entities/session.dart';
+import '../widgets/detalle_incidencia_modal.dart';
 
 // Modelo para representar la incidencia/reporte
 class IncidenciaItem {
@@ -11,6 +12,11 @@ class IncidenciaItem {
   final String descripcion;
   final String fecha;
   final String estado;
+  final String? ubicacion;
+  final double? latitud;
+  final double? longitud;
+  final String? imagen;
+  final String? cuadrilla;
 
   IncidenciaItem({
     this.id,
@@ -19,6 +25,11 @@ class IncidenciaItem {
     required this.descripcion,
     required this.fecha,
     required this.estado,
+    this.ubicacion,
+    this.latitud,
+    this.longitud,
+    this.imagen,
+    this.cuadrilla,
   });
 }
 
@@ -37,7 +48,8 @@ class _MisReportesPageState extends State<MisReportesPage> {
   List<IncidenciaItem> filteredReportes = [];
 
   // TODO: Ajusta esta URL a la IP de tu servidor backend local
-  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/incidencias';
+  final String baseUrl =
+      'https://sitienergia-backend.onrender.com/api/incidencias';
 
   @override
   void initState() {
@@ -64,14 +76,15 @@ class _MisReportesPageState extends State<MisReportesPage> {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
-        
+
         final list = data.map((item) {
-          final categoriaNombre = (item['categoria'] is Map) 
+          final categoriaNombre = (item['categoria'] is Map)
               ? item['categoria']['nombre'] ?? 'Sin categoría'
               : 'Falla Eléctrica';
-              
+
           final fechaCruda = item['fechaCreacion']?.toString() ?? '';
-          final fechaLimpia = fechaCruda.contains('T') ? fechaCruda.split('T')[0] : fechaCruda;
+          final fechaLimpia =
+              fechaCruda.contains('T') ? fechaCruda.split('T')[0] : fechaCruda;
 
           return IncidenciaItem(
             id: item['id'],
@@ -80,6 +93,16 @@ class _MisReportesPageState extends State<MisReportesPage> {
             descripcion: item['descripcion'] ?? 'Sin detalles',
             fecha: fechaLimpia,
             estado: item['estado'] ?? 'PENDIENTE',
+            ubicacion:
+                item['ubicacion']?.toString() ?? item['direccion']?.toString(),
+            latitud: item['latitud'] != null
+                ? double.tryParse(item['latitud'].toString())
+                : null,
+            longitud: item['longitud'] != null
+                ? double.tryParse(item['longitud'].toString())
+                : null,
+            imagen: item['imagen']?.toString(),
+            cuadrilla: item['cuadrillaAsignada']?.toString(),
           );
         }).toList();
 
@@ -96,7 +119,8 @@ class _MisReportesPageState extends State<MisReportesPage> {
     } catch (e) {
       if (mounted) {
         setState(() => loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al cargar: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error al cargar: $e')));
       }
     }
   }
@@ -104,41 +128,54 @@ class _MisReportesPageState extends State<MisReportesPage> {
   void _filterReportes() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      filteredReportes = reportes.where((r) =>
-        r.codigo.toLowerCase().contains(query) ||
-        r.categoria.toLowerCase().contains(query) ||
-        r.estado.toLowerCase().contains(query)
-      ).toList();
+      filteredReportes = reportes
+          .where((r) =>
+              r.codigo.toLowerCase().contains(query) ||
+              r.categoria.toLowerCase().contains(query) ||
+              r.estado.toLowerCase().contains(query))
+          .toList();
     });
   }
 
   Color _getColorEstado(String estado) {
     switch (estado.toUpperCase()) {
-      case 'PENDIENTE': return Colors.red[700]!;
-      case 'EN_PROCESO': return Colors.orange[800]!;
+      case 'PENDIENTE':
+        return Colors.red[700]!;
+      case 'EN_PROCESO':
+        return Colors.orange[800]!;
       case 'RESUELTO':
-      case 'ATENDIDO': return Colors.green[700]!;
-      default: return Colors.blueGrey;
+      case 'ATENDIDO':
+        return Colors.green[700]!;
+      default:
+        return Colors.blueGrey;
     }
   }
 
   IconData _getIconoEstado(String estado) {
     switch (estado.toUpperCase()) {
-      case 'PENDIENTE': return Icons.access_time_rounded;
-      case 'EN_PROCESO': return Icons.engineering_rounded;
+      case 'PENDIENTE':
+        return Icons.access_time_rounded;
+      case 'EN_PROCESO':
+        return Icons.engineering_rounded;
       case 'RESUELTO':
-      case 'ATENDIDO': return Icons.check_circle_outline_rounded;
-      default: return Icons.info_outline;
+      case 'ATENDIDO':
+        return Icons.check_circle_outline_rounded;
+      default:
+        return Icons.info_outline;
     }
   }
 
   String _getTextoEstado(String estado) {
     switch (estado.toUpperCase()) {
-      case 'PENDIENTE': return 'PENDIENTE';
-      case 'EN_PROCESO': return 'EN PROCESO';
+      case 'PENDIENTE':
+        return 'PENDIENTE';
+      case 'EN_PROCESO':
+        return 'EN PROCESO';
       case 'RESUELTO':
-      case 'ATENDIDO': return 'RESUELTO';
-      default: return estado;
+      case 'ATENDIDO':
+        return 'RESUELTO';
+      default:
+        return estado;
     }
   }
 
@@ -147,7 +184,8 @@ class _MisReportesPageState extends State<MisReportesPage> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Mis Reportes', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Mis Reportes',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xff176b87),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -166,7 +204,8 @@ class _MisReportesPageState extends State<MisReportesPage> {
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
                       fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                          vertical: 0, horizontal: 16),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(30),
                         borderSide: BorderSide.none,
@@ -179,7 +218,8 @@ class _MisReportesPageState extends State<MisReportesPage> {
                       ? const Center(
                           child: Text(
                             'No tienes reportes registrados.',
-                            style: TextStyle(color: Colors.black54, fontSize: 16),
+                            style:
+                                TextStyle(color: Colors.black54, fontSize: 16),
                           ),
                         )
                       : ListView.builder(
@@ -202,73 +242,130 @@ class _MisReportesPageState extends State<MisReportesPage> {
                                   )
                                 ],
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () => mostrarDetalleIncidencia(
+                                    context: context,
+                                    codigo: item.codigo,
+                                    categoria: item.categoria,
+                                    descripcion: item.descripcion,
+                                    estado: item.estado,
+                                    fecha: item.fecha,
+                                    ubicacion: item.ubicacion,
+                                    latitud: item.latitud,
+                                    longitud: item.longitud,
+                                    imagen: item.imagen,
+                                    cuadrilla: item.cuadrilla,
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          item.codigo,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
-                                            color: Color(0xff176b87),
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: colorEstado.withOpacity(0.12),
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: colorEstado, width: 1),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(_getIconoEstado(item.estado), size: 14, color: colorEstado),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                _getTextoEstado(item.estado),
-                                                style: TextStyle(
-                                                  color: colorEstado,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              item.codigo,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                                color: Color(0xff176b87),
                                               ),
-                                            ],
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: colorEstado
+                                                    .withOpacity(0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                    color: colorEstado,
+                                                    width: 1),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                      _getIconoEstado(
+                                                          item.estado),
+                                                      size: 14,
+                                                      color: colorEstado),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    _getTextoEstado(
+                                                        item.estado),
+                                                    style: TextStyle(
+                                                      color: colorEstado,
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const Divider(height: 20),
+                                        Text(
+                                          item.categoria,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                    const Divider(height: 20),
-                                    Text(
-                                      item.categoria,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item.descripcion,
-                                      style: const TextStyle(fontSize: 14, color: Colors.black54),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today_outlined, size: 14, color: Colors.grey),
-                                        const SizedBox(width: 4),
+                                        const SizedBox(height: 4),
                                         Text(
-                                          'Reportado el ${item.fecha}',
-                                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                          item.descripcion,
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.black54),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                                Icons.calendar_today_outlined,
+                                                size: 14,
+                                                color: Colors.grey),
+                                            const SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                'Reportado el ${item.fecha}',
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey),
+                                              ),
+                                            ),
+                                            const Icon(
+                                              Icons.location_on_outlined,
+                                              size: 15,
+                                              color: Color(0xff176b87),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            const Text(
+                                              'Ver mapa y evidencia',
+                                              style: TextStyle(
+                                                color: Color(0xff176b87),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             );

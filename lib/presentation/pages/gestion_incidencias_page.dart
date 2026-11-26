@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../domain/entities/session.dart';
+import '../widgets/detalle_incidencia_modal.dart';
 
 class IncidenciaAdminItem {
   final int id;
@@ -11,6 +12,10 @@ class IncidenciaAdminItem {
   final String fecha;
   final String estado;
   final String cuadrillaAsignada;
+  final String? ubicacion;
+  final double? latitud;
+  final double? longitud;
+  final String? imagen;
 
   IncidenciaAdminItem({
     required this.id,
@@ -20,6 +25,10 @@ class IncidenciaAdminItem {
     required this.fecha,
     required this.estado,
     required this.cuadrillaAsignada,
+    this.ubicacion,
+    this.latitud,
+    this.longitud,
+    this.imagen,
   });
 }
 
@@ -38,8 +47,10 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
   List<IncidenciaAdminItem> filteredReportes = [];
 
   // --- URL LOCAL CORREGIDA ---
-  final String baseUrl = 'https://sitienergia-backend.onrender.com/api/incidencias';
-  final String usuariosUrl = 'https://sitienergia-backend.onrender.com/api/usuarios';
+  final String baseUrl =
+      'https://sitienergia-backend.onrender.com/api/incidencias';
+  final String usuariosUrl =
+      'https://sitienergia-backend.onrender.com/api/usuarios';
 
   @override
   void initState() {
@@ -88,6 +99,12 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
             fecha: fechaLimpia,
             estado: item['estado'] ?? 'PENDIENTE',
             cuadrillaAsignada: cuadrilla,
+            ubicacion: item['direccion'] ??
+                item['ubicacion'] ??
+                'Dirección no registrada',
+            latitud: double.tryParse(item['latitud']?.toString() ?? ''),
+            longitud: double.tryParse(item['longitud']?.toString() ?? ''),
+            imagen: item['imagen']?.toString(),
           );
         }).toList();
 
@@ -121,6 +138,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
       );
 
       if (response.statusCode == 200) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Estado actualizado'),
             backgroundColor: Colors.green));
@@ -129,6 +147,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
         throw Exception('Error al actualizar');
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
@@ -145,6 +164,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
       );
 
       if (response.statusCode == 200) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Técnico asignado exitosamente'),
             backgroundColor: Colors.green));
@@ -153,6 +173,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
         throw Exception('Error al asignar técnico');
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
@@ -252,6 +273,7 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Error cargando técnicos: $e'),
           backgroundColor: Colors.red));
@@ -391,8 +413,22 @@ class _GestionIncidenciasPageState extends State<GestionIncidenciasPage> {
                               margin: const EdgeInsets.only(bottom: 12),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16)),
+                              clipBehavior: Clip.antiAlias,
                               child: ListTile(
                                 contentPadding: const EdgeInsets.all(16),
+                                onTap: () => mostrarDetalleIncidencia(
+                                  context: context,
+                                  codigo: item.codigo,
+                                  categoria: item.categoria,
+                                  descripcion: item.descripcion,
+                                  estado: item.estado,
+                                  fecha: item.fecha,
+                                  ubicacion: item.ubicacion,
+                                  latitud: item.latitud,
+                                  longitud: item.longitud,
+                                  imagen: item.imagen,
+                                  cuadrilla: item.cuadrillaAsignada,
+                                ),
                                 title: Text(item.codigo,
                                     style: const TextStyle(
                                         fontWeight: FontWeight.bold,

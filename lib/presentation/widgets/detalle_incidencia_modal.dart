@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -121,6 +122,14 @@ class DetalleIncidenciaModal extends StatelessWidget {
     return base64String.replaceAll(RegExp(r'\s+'), '');
   }
 
+  Uint8List? _decodificarBase64(String raw) {
+    try {
+      return base64Decode(_limpiarBase64(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
   Color _getColorEstado(String est) {
     switch (est.toUpperCase()) {
       case 'PENDIENTE':
@@ -140,6 +149,10 @@ class DetalleIncidenciaModal extends StatelessWidget {
   Widget build(BuildContext context) {
     final coords = _resolverCoordenadas(latitud, longitud, ubicacion);
     final colorEstado = _getColorEstado(estado);
+    final imagenBytes =
+        imagen != null && imagen!.isNotEmpty && !imagen!.startsWith('http')
+            ? _decodificarBase64(imagen!)
+            : null;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -241,12 +254,14 @@ class DetalleIncidenciaModal extends StatelessWidget {
                           const Icon(Icons.groups,
                               size: 16, color: Color(0xff176b87)),
                           const SizedBox(width: 6),
-                          Text(
-                            'Cuadrilla: $cuadrilla',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xff176b87),
+                          Expanded(
+                            child: Text(
+                              'Cuadrilla: $cuadrilla',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xff176b87),
+                              ),
                             ),
                           ),
                         ],
@@ -360,13 +375,15 @@ class DetalleIncidenciaModal extends StatelessWidget {
                                 errorBuilder: (_, __, ___) =>
                                     const Text('No se pudo cargar la imagen'),
                               )
-                            : Image.memory(
-                                base64Decode(_limpiarBase64(imagen!)),
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Text(
-                                    'No se pudo decodificar la imagen'),
-                              ),
+                            : imagenBytes == null
+                                ? const Text('No se pudo decodificar la imagen')
+                                : Image.memory(
+                                    imagenBytes,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Text(
+                                        'No se pudo decodificar la imagen'),
+                                  ),
                       ),
                     ],
                   ],
